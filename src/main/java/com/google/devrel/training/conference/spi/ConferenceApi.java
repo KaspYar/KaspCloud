@@ -69,7 +69,7 @@ public class ConferenceApi {
         // TODO 1
         // Set the displayName to the value sent by the ProfileForm, if sent
         // otherwise set it to null
-        if (profileForm.getDisplayName() != null) {
+        if (profileForm.getDisplayName() != null || !profileForm.getDisplayName().isEmpty() ) {
             displayName = profileForm.getDisplayName();
         } else {
             displayName = null;
