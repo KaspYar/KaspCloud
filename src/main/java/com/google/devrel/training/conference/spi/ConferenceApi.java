@@ -10,8 +10,14 @@ import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.memcache.MemcacheService;
+import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import com.google.appengine.api.taskqueue.Queue;
+import com.google.appengine.api.taskqueue.QueueFactory;
+import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
+import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ConferenceForm;
@@ -184,6 +190,7 @@ public class ConferenceApi {
 
         // Get the Conference Id from the Key
         final long conferenceId = conferenceKey.getId();
+        final Queue queue = QueueFactory.getDefaultQueue();
 
         // Get the existing Profile entity for the current user if there is one
         // Otherwise create a new Profile entity with default values
@@ -197,6 +204,11 @@ public class ConferenceApi {
         Conference conference = new Conference(conferenceId, userId, conferenceForm);
         // Save Conference and Profile Entities
         ofy().save().entities(profile, conference).now();
+
+        queue.add(ofy().getTransaction(),
+                TaskOptions.Builder.withUrl("/tasks/send_confirmation_email")
+                        .param("email", profile.getMainEmail())
+                        .param("conferenceInfo", conference.toString()));
 
 
         return conference;
@@ -322,7 +334,6 @@ public class ConferenceApi {
         // Get the userId
         final String userId = user.getUserId();
 
-        // TODO
         // Start transaction
         WrappedBoolean result = ofy().transact(new Work<WrappedBoolean>() {
             @Override
@@ -415,11 +426,9 @@ public class ConferenceApi {
             throw new NotFoundException("Profile doesn't exist.");
         }
 
-        // TODO
         // Get the value of the profile's conferenceKeysToAttend property
         List<String> keyStringsToAttend = profile.getConferenceKeysToAttend(); // change this
 
-        // TODO
         // Iterate over keyStringsToAttend,
         // and return a Collection of the
         // Conference entities that the user has registered to atend
@@ -446,7 +455,6 @@ public class ConferenceApi {
         // Get the userId
         final String userId = user.getUserId();
 
-        // TODO
         // Start transaction
         WrappedBoolean result = ofy().transact(new Work<WrappedBoolean>() {
             @Override
@@ -510,6 +518,18 @@ public class ConferenceApi {
             }
         }
         return result;
+    }
+
+    @ApiMethod(name = "getAnnouncement", path = "announcement", httpMethod = HttpMethod.GET)
+    public Announcement getAnnouncement() {
+        MemcacheService memcacheService = MemcacheServiceFactory
+                .getMemcacheService();
+        Object message = memcacheService
+                .get(Constants.MEMCACHE_ANNOUNCEMENTS_KEY);
+        if (message != null) {
+            return new Announcement(message.toString());
+        }
+        return null;
     }
 
 
